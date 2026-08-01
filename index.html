@@ -2,110 +2,369 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Home Control Hub</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Home Hub</title>
+    <!-- Paho MQTT Library over WebSockets -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
     <style>
-        :root { --bg: #121214; --card: #1c1c1e; --accent: #0a84ff; --txt: #ffffff; }
-        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--txt); margin: 0; padding: 15px; }
-        h1, h2 { font-weight: 600; margin-bottom: 10px; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
-        .card { background: var(--card); border-radius: 14px; padding: 15px; display: flex; flex-direction: column; justify-content: space-between; }
-        .btn { background: var(--accent); color: white; border: none; padding: 12px; border-radius: 10px; font-weight: bold; cursor: pointer; }
-        .btn-off { background: #3a3a3c; }
-        input[type=range] { width: 100%; margin: 10px 0; }
-        input[type=color] { border: none; width: 100%; height: 40px; border-radius: 8px; cursor: pointer; background: transparent; }
+        :root {
+            --bg: #000000;
+            --card-bg: #1c1c1e;
+            --card-bg-active: #2c2c2e;
+            --accent: #0a84ff;
+            --accent-green: #30d158;
+            --accent-red: #ff453a;
+            --accent-orange: #ff9f0a;
+            --text: #ffffff;
+            --text-sub: #8e8e93;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 20px 16px 40px 16px;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-top: 10px;
+        }
+
+        .title-area h1 { margin: 0; font-size: 28px; font-weight: 700; }
+        .title-area p { margin: 2px 0 0 0; font-size: 13px; color: var(--text-sub); }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background-color: var(--accent-red);
+            box-shadow: 0 0 8px var(--accent-red);
+            transition: all 0.3s ease;
+        }
+        .status-dot.online {
+            background-color: var(--accent-green);
+            box-shadow: 0 0 8px var(--accent-green);
+        }
+
+        details {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 12px 16px;
+            margin-bottom: 20px;
+        }
+        summary { font-weight: 600; cursor: pointer; color: var(--accent); }
+        .config-form { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+        .config-form input {
+            background: #2c2c2e; border: none; padding: 10px; border-radius: 8px; color: #fff; font-size: 14px;
+        }
+
+        section { margin-bottom: 24px; }
+        section h2 { font-size: 18px; color: var(--text-sub); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 12px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            min-height: 110px;
+        }
+
+        .card-title { font-weight: 600; font-size: 16px; margin-bottom: 8px; }
+
+        /* Sliders */
+        .slider-container { display: flex; flex-direction: column; gap: 8px; }
+        .slider-val { font-size: 13px; color: var(--text-sub); align-self: flex-end; }
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: #3a3a3c;
+            height: 8px;
+            border-radius: 4px;
+            outline: none;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: var(--accent);
+            cursor: pointer;
+        }
+
+        /* Toggle Buttons */
+        .btn-group { display: flex; gap: 8px; margin-top: 8px; }
+        .btn {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            background: #3a3a3c;
+            color: #fff;
+            transition: active 0.1s;
+        }
+        .btn:active { transform: scale(0.96); }
+        .btn-on { background: var(--accent); }
+        .btn-heat { background: var(--accent-orange); }
+        .btn-off { background: #2c2c2e; color: var(--text-sub); }
+
+        /* Color Pickers */
+        .color-picker {
+            -webkit-appearance: none;
+            border: none;
+            width: 100%;
+            height: 44px;
+            border-radius: 10px;
+            cursor: pointer;
+            background: transparent;
+        }
+
+        /* Live Feed Log */
+        .log-box {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 12px;
+            font-family: monospace;
+            font-size: 12px;
+            height: 80px;
+            overflow-y: auto;
+            color: var(--accent-green);
+        }
     </style>
 </head>
 <body>
 
-    <h1>🏡 Home Control Hub</h1>
+    <header>
+        <div class="title-area">
+            <h1>Control Hub</h1>
+            <p>Arduino Mega + ESP32 System</p>
+        </div>
+        <div id="statusDot" class="status-dot"></div>
+    </header>
 
-    <!-- DIMMER LIGHTS -->
-    <h2>AC Dimmable Lights</h2>
-    <div class="grid">
-        <div class="card">
-            <span>Light 1 (Dimmer)</span>
-            <input type="range" min="0" max="100" value="0" onchange="sendCmd('DIM:1:' + this.value)">
+    <!-- Cloud Settings Accordion -->
+    <details>
+        <summary>⚙️ Cloud Connection Config</summary>
+        <div class="config-form">
+            <input type="text" id="cfgHost" placeholder="HiveMQ Host (e.g. xxx.hivemq.cloud)">
+            <input type="text" id="cfgPort" value="8884" placeholder="Port (Default 8884)">
+            <input type="text" id="cfgUser" placeholder="MQTT Username">
+            <input type="password" id="cfgPass" placeholder="MQTT Password">
+            <button class="btn btn-on" onclick="saveAndConnect()">Save & Connect</button>
         </div>
-        <div class="card">
-            <span>Light 2 (Dimmer)</span>
-            <input type="range" min="0" max="100" value="0" onchange="sendCmd('DIM:2:' + this.value)">
-        </div>
-        <div class="card">
-            <span>Light 3 (Dimmer)</span>
-            <input type="range" min="0" max="100" value="0" onchange="sendCmd('DIM:3:' + this.value)">
-        </div>
-        <div class="card">
-            <span>Light 4 (Dimmer)</span>
-            <input type="range" min="0" max="100" value="0" onchange="sendCmd('DIM:4:' + this.value)">
-        </div>
-    </div>
+    </details>
 
-    <!-- RELAY LIGHTS -->
-    <h2>Switched Lights</h2>
-    <div class="grid">
-        <div class="card">
-            <span>Light 5</span>
-            <button class="btn" onclick="sendCmd('RELAY:5:ON')">ON</button>
-            <button class="btn btn-off" onclick="sendCmd('RELAY:5:OFF')">OFF</button>
+    <!-- 1. AC DIMMABLE LIGHTS -->
+    <section>
+        <h2>Dimmable Lights (1 - 4)</h2>
+        <div class="grid">
+            <div class="card">
+                <div class="card-title">Light 1</div>
+                <div class="slider-container">
+                    <span id="dimVal1" class="slider-val">0%</span>
+                    <input type="range" min="0" max="100" value="0" oninput="updateDimLabel(1, this.value)" onchange="sendCmd('DIM:1:' + this.value)">
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-title">Light 2</div>
+                <div class="slider-container">
+                    <span id="dimVal2" class="slider-val">0%</span>
+                    <input type="range" min="0" max="100" value="0" oninput="updateDimLabel(2, this.value)" onchange="sendCmd('DIM:2:' + this.value)">
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-title">Light 3</div>
+                <div class="slider-container">
+                    <span id="dimVal3" class="slider-val">0%</span>
+                    <input type="range" min="0" max="100" value="0" oninput="updateDimLabel(3, this.value)" onchange="sendCmd('DIM:3:' + this.value)">
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-title">Light 4</div>
+                <div class="slider-container">
+                    <span id="dimVal4" class="slider-val">0%</span>
+                    <input type="range" min="0" max="100" value="0" oninput="updateDimLabel(4, this.value)" onchange="sendCmd('DIM:4:' + this.value)">
+                </div>
+            </div>
         </div>
-        <div class="card">
-            <span>Light 6</span>
-            <button class="btn" onclick="sendCmd('RELAY:6:ON')">ON</button>
-            <button class="btn btn-off" onclick="sendCmd('RELAY:6:OFF')">OFF</button>
-        </div>
-        <div class="card">
-            <span>Light 7</span>
-            <button class="btn" onclick="sendCmd('RELAY:7:ON')">ON</button>
-            <button class="btn btn-off" onclick="sendCmd('RELAY:7:OFF')">OFF</button>
-        </div>
-    </div>
+    </section>
 
-    <!-- RGB LED STRIPS -->
-    <h2>RGB Lighting</h2>
-    <div class="grid">
-        <div class="card">
-            <span>RGB Strip 1</span>
-            <input type="color" onchange="sendRGB(1, this.value)">
+    <!-- 2. SWITCHED LIGHTS -->
+    <section>
+        <h2>Switched Lights (5 - 7)</h2>
+        <div class="grid">
+            <div class="card">
+                <div class="card-title">Light 5</div>
+                <div class="btn-group">
+                    <button class="btn btn-on" onclick="sendCmd('RELAY:5:ON')">ON</button>
+                    <button class="btn btn-off" onclick="sendCmd('RELAY:5:OFF')">OFF</button>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-title">Light 6</div>
+                <div class="btn-group">
+                    <button class="btn btn-on" onclick="sendCmd('RELAY:6:ON')">ON</button>
+                    <button class="btn btn-off" onclick="sendCmd('RELAY:6:OFF')">OFF</button>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-title">Light 7</div>
+                <div class="btn-group">
+                    <button class="btn btn-on" onclick="sendCmd('RELAY:7:ON')">ON</button>
+                    <button class="btn btn-off" onclick="sendCmd('RELAY:7:OFF')">OFF</button>
+                </div>
+            </div>
         </div>
-        <div class="card">
-            <span>RGB Strip 2</span>
-            <input type="color" onchange="sendRGB(2, this.value)">
-        </div>
-    </div>
+    </section>
 
-    <!-- HEATING CONTROL -->
-    <h2>Heating System</h2>
-    <div class="grid">
-        <div class="card">
-            <span>Hot Water</span>
-            <button class="btn" onclick="sendCmd('HEAT:HW:ON')">ON</button>
-            <button class="btn btn-off" onclick="sendCmd('HEAT:HW:OFF')">OFF</button>
+    <!-- 3. RGB STRIPS -->
+    <section>
+        <h2>RGB Accent Lighting</h2>
+        <div class="grid">
+            <div class="card">
+                <div class="card-title">RGB Strip 1</div>
+                <input type="color" class="color-picker" value="#000000" onchange="sendRGB(1, this.value)">
+            </div>
+            <div class="card">
+                <div class="card-title">RGB Strip 2</div>
+                <input type="color" class="color-picker" value="#000000" onchange="sendRGB(2, this.value)">
+            </div>
         </div>
-        <div class="card">
-            <span>Central Heating</span>
-            <button class="btn" onclick="sendCmd('HEAT:CH:ON')">ON</button>
-            <button class="btn btn-off" onclick="sendCmd('HEAT:CH:OFF')">OFF</button>
+    </section>
+
+    <!-- 4. HEATING CONTROLS -->
+    <section>
+        <h2>Heating & Hot Water</h2>
+        <div class="grid">
+            <div class="card">
+                <div class="card-title">Hot Water</div>
+                <div class="btn-group">
+                    <button class="btn btn-heat" onclick="sendCmd('HEAT:HW:ON')">ON</button>
+                    <button class="btn btn-off" onclick="sendCmd('HEAT:HW:OFF')">OFF</button>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-title">Central Heating</div>
+                <div class="btn-group">
+                    <button class="btn btn-heat" onclick="sendCmd('HEAT:CH:ON')">ON</button>
+                    <button class="btn btn-off" onclick="sendCmd('HEAT:CH:OFF')">OFF</button>
+                </div>
+            </div>
         </div>
-    </div>
+    </section>
+
+    <!-- LIVE FEED LOG -->
+    <section>
+        <h2>Mega Live Feedback</h2>
+        <div id="logBox" class="log-box">Ready to connect...</div>
+    </section>
 
     <script>
-        // Converts HEX Colors from <input type="color"> to RGB
+        let client = null;
+
+        // Auto Load Saved Config
+        window.onload = () => {
+            document.getElementById('cfgHost').value = localStorage.getItem('mqtt_host') || '';
+            document.getElementById('cfgPort').value = localStorage.getItem('mqtt_port') || '8884';
+            document.getElementById('cfgUser').value = localStorage.getItem('mqtt_user') || '';
+            document.getElementById('cfgPass').value = localStorage.getItem('mqtt_pass') || '';
+            if (localStorage.getItem('mqtt_host')) connectMQTT();
+        };
+
+        function saveAndConnect() {
+            localStorage.setItem('mqtt_host', document.getElementById('cfgHost').value.trim());
+            localStorage.setItem('mqtt_port', document.getElementById('cfgPort').value.trim());
+            localStorage.setItem('mqtt_user', document.getElementById('cfgUser').value.trim());
+            localStorage.setItem('mqtt_pass', document.getElementById('cfgPass').value.trim());
+            connectMQTT();
+        }
+
+        function log(msg) {
+            const lb = document.getElementById('logBox');
+            lb.innerHTML = `> ${msg}<br>${lb.innerHTML}`;
+        }
+
+        function connectMQTT() {
+            const host = localStorage.getItem('mqtt_host');
+            const port = parseInt(localStorage.getItem('mqtt_port')) || 8884;
+            const user = localStorage.getItem('mqtt_user');
+            const pass = localStorage.getItem('mqtt_pass');
+
+            if (!host) { alert('Please enter your HiveMQ Host'); return; }
+
+            const clientId = 'iPhone_PWA_' + Math.random().toString(16).substr(2, 8);
+            client = new Paho.MQTT.Client(host, port, clientId);
+
+            client.onConnectionLost = (rsp) => {
+                document.getElementById('statusDot').classList.remove('online');
+                log('Connection lost: ' + rsp.errorMessage);
+            };
+
+            client.onMessageArrived = (msg) => {
+                log('Feedback: ' + msg.payloadString);
+            };
+
+            const options = {
+                timeout: 5,
+                keepAliveInterval: 30,
+                cleanSession: true,
+                useSSL: true,
+                onSuccess: () => {
+                    document.getElementById('statusDot').classList.add('online');
+                    log('Connected to HiveMQ Cloud!');
+                    client.subscribe('myhome/mega/status');
+                },
+                onFailure: (err) => {
+                    document.getElementById('statusDot').classList.remove('online');
+                    log('Connect failed: ' + err.errorMessage);
+                }
+            };
+
+            if (user) options.userName = user;
+            if (pass) options.password = pass;
+
+            client.connect(options);
+        }
+
+        function sendCmd(cmd) {
+            if (client && client.isConnected()) {
+                const message = new Paho.MQTT.Message(cmd);
+                message.destinationName = 'myhome/mega/command';
+                client.send(message);
+                log('Tx: ' + cmd);
+            } else {
+                alert('Not connected to HiveMQ!');
+            }
+        }
+
+        function updateDimLabel(id, val) {
+            document.getElementById(`dimVal${id}`).innerText = val + '%';
+        }
+
         function sendRGB(stripNum, hex) {
             let r = parseInt(hex.substr(1,2), 16);
             let g = parseInt(hex.substr(3,2), 16);
             let b = parseInt(hex.substr(5,2), 16);
             sendCmd(`RGB:${stripNum}:${r},${g},${b}`);
-        }
-
-        function sendCmd(cmd) {
-            console.log("Sending Command: ", cmd);
-            if (typeof client !== 'undefined' && client.connected) {
-                let message = new Paho.MQTT.Message(cmd);
-                message.destinationName = "myhome/mega/command";
-                client.send(message);
-            }
         }
     </script>
 </body>
