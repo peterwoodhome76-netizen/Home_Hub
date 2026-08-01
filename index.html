@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Smart Home Hub</title>
+    
+    <!-- PWA Settings for iOS -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Home Hub">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%230f172a'/><path d='M30 45 L50 28 L70 45 V70 H30 Z' fill='none' stroke='%2338bdf8' stroke-width='6' stroke-linejoin='round'/><rect x='44' y='52' width='12' height='18' fill='%2338bdf8'/></svg>">
+    
+    <!-- MQTT.js library for WebSockets over TLS -->
+    <script src="https://unpkg.com/mqtt@4.3.7/dist/mqtt.min.js"></script>
+    
+    <style>
+        :root {
+            --bg-color: #0b0f17;
+            --card-bg: #161f30;
+            --card-border: #233047;
+            --primary: #38bdf8;
+            --primary-glow: rgba(56, 189, 248, 0.25);
+            --success: #22c55e;
+            --success-glow: rgba(34, 197, 94, 0.25);
+            --danger: #ef4444;
+            --text-main: #f8fafc;
+            --text-sub: #94a3b8;
+            --radius-lg: 20px;
+            --radius-md: 14px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            min-height: 100vh;
+            padding: env(safe-area-inset-top, 20px) 16px calc(env(safe-area-inset-bottom, 20px) + 20px) 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* Header */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 4px;
+        }
+
+        .title-area h1 {
+            font-size: 26px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+
+        .title-area p {
+            font-size: 13px;
+            color: var(--text-sub);
+            margin-top: 2px;
+        }
+
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            padding: 8px 14px;
+            border-radius: 30px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .status-dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background-color: var(--danger);
+            box-shadow: 0 0 8px var(--danger);
+            transition: all 0.3s ease;
+        }
+
+        .status-dot.online {
+            background-color: var(--success);
+            box-shadow: 0 0 10px var(--success-glow);
+        }
+
+        /* Settings Accordion */
+        .settings-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .settings-header {
+            padding: 16px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 15px;
+        }
+
+        .settings-content {
+            padding: 0 20px 20px 20px;
+            display: none;
+            flex-direction: column;
+            gap: 12px;
+            border-top: 1px solid var(--card-border);
+            margin-top: 4px;
+            padding-top: 16px;
+        }
+
+        .settings-card.open .settings-content {
+            display: flex;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .input-group label {
+            font-size: 12px;
+            color: var(--text-sub);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 600;
+        }
+
+        .input-group input {
+            background: #0b0f17;
+            border: 1px solid var(--card-border);
+            color: var(--text-main);
+            padding: 12px;
+            border-radius: var(--radius-md);
+            font-size: 14px;
+            outline: none;
+        }
+
+        .btn-save {
+            background: var(--primary);
+            color: #0b0f17;
+            font-weight: 700;
+            border: none;
+            padding: 14px;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            margin-top: 8px;
+            font-size: 15px;
+        }
+
+        /* Controls Grid */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 14px;
+        }
+
+        .tile {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: var(--radius-lg);
+            padding: 18px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            height: 130px;
+            cursor: pointer;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+        }
+
+        .tile:active {
+            transform: scale(0.96);
+        }
+
+        .tile.active {
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            border-color: var(--primary);
+            box-shadow: 0 0 20px var(--primary-glow);
+        }
+
+        .tile-icon {
+            width: 38px;
+            height: 38px;
+            border-radius: 12px;
+            background: #0b0f17;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            color: var(--text-sub);
+            transition: all 0.3s ease;
+        }
+
+        .tile.active .tile-icon {
+            background: var(--primary);
+            color: #0b0f17;
+        }
+
+        .tile-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .tile-title {
+            font-size: 15px;
+            font-weight: 600;
+        }
+
+        .tile-state {
+            font-size: 12px;
+            color: var(--text-sub);
+            font-weight: 500;
+        }
+
+        .tile.active .tile-state {
+            color: var(--primary);
+        }
+
+        /* Console Output Card */
+        .console-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: var(--radius-lg);
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: auto;
+        }
+
+        .console-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 13px;
+            color: var(--text-sub);
+            font-weight: 600;
+        }
+
+        .console-logs {
+            background: #070a0f;
+            border-radius: var(--radius-md);
+            padding: 12px;
+            font-family: "SF Mono", "Courier New", monospace;
+            font-size: 12px;
+            height: 90px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            color: #38bdf8;
+        }
+
+        .log-entry {
+            line-height: 1.4;
+            word-break: break-all;
+        }
+        
+        .log-entry.rx { color: #22c55e; }
+        .log-entry.sys { color: #94a3b8; }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <header>
+        <div class="title-area">
+            <h1>Control Hub</h1>
+            <p>Arduino Mega + ESP32 Cloud</p>
+        </div>
+        <div class="status-badge">
+            <div class="status-dot" id="statusDot"></div>
+            <span id="statusText">Offline</span>
+        </div>
+    </header>
+
+    <!-- Cloud Connection Settings -->
+    <div class="settings-card" id="settingsCard">
+        <div class="settings-header" onclick="toggleSettings()">
+            <span>⚙️ Cloud Connection Config</span>
+            <span id="accordionArrow">▼</span>
+        </div>
+        <div class="settings-content">
+            <div class="input-group">
+                <label>HiveMQ Hostname (WebSockets)</label>
+                <input type="text" id="mqttHost" placeholder="e.g. xxxxxx.hivemq.cloud">
+            </div>
+            <div class="input-group">
+                <label>WebSocket Port (Default 8884)</label>
+                <input type="number" id="mqttPort" value="8884">
+            </div>
+            <div class="input-group">
+                <label>MQTT Username</label>
+                <input type="text" id="mqttUser" placeholder="Cloud Username">
+            </div>
+            <div class="input-group">
+                <label>MQTT Password</label>
+                <input type="password" id="mqttPass" placeholder="Cloud Password">
+            </div>
+            <button class="btn-save" onclick="connectMQTT()">Connect to HiveMQ</button>
+        </div>
+    </div>
+
+    <!-- Interactive Controls Grid -->
+    <div class="grid">
+        <!-- Relay 1 -->
+        <div class="tile" id="tile-RELAY1" onclick="toggleSwitch('RELAY1')">
+            <div class="tile-icon">💡</div>
+            <div class="tile-info">
+                <div class="tile-title">Main Light</div>
+                <div class="tile-state" id="state-RELAY1">OFF</div>
+            </div>
+        </div>
+
+        <!-- Relay 2 -->
+        <div class="tile" id="tile-RELAY2" onclick="toggleSwitch('RELAY2')">
+            <div class="tile-icon">⚡</div>
+            <div class="tile-info">
+                <div class="tile-title">Power Socket</div>
+                <div class="tile-state" id="state-RELAY2">OFF</div>
+            </div>
+        </div>
+
+        <!-- Relay 3 -->
+        <div class="tile" id="tile-RELAY3" onclick="toggleSwitch('RELAY3')">
+            <div class="tile-icon">🚪</div>
+            <div class="tile-info">
+                <div class="tile-title">Garage Door</div>
+                <div class="tile-state" id="state-RELAY3">OFF</div>
+            </div>
+        </div>
+
+        <!-- Pulse Button -->
+        <div class="tile" id="tile-PULSE" onclick="sendPulse('GATE_PULSE')">
+            <div class="tile-icon">🔔</div>
+            <div class="tile-info">
+                <div class="tile-title">Trigger Gate</div>
+                <div class="tile-state">PULSE COMMAND</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Serial Data Feed (Mega -> iPhone) -->
+    <div class="console-card">
+        <div class="console-header">
+            <span>MEGA LIVE FEED</span>
+            <span id="lastUpdated">--:--:--</span>
+        </div>
+        <div class="console-logs" id="consoleLogs">
+            <div class="log-entry sys">Waiting for connection...</div>
+        </div>
+    </div>
+
+    <script>
+        let client = null;
+        const states = { RELAY1: false, RELAY2: false, RELAY3: false };
+
+        // Load saved credentials on start
+        window.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('mqttHost').value = localStorage.getItem('mqtt_host') || '';
+            document.getElementById('mqttPort').value = localStorage.getItem('mqtt_port') || '8884';
+            document.getElementById('mqttUser').value = localStorage.getItem('mqtt_user') || '';
+            document.getElementById('mqttPass').value = localStorage.getItem('mqtt_pass') || '';
+
+            if (localStorage.getItem('mqtt_host')) {
+                connectMQTT();
+            } else {
+                document.getElementById('settingsCard').classList.add('open');
+            }
+        });
+
+        function toggleSettings() {
+            document.getElementById('settingsCard').classList.toggle('open');
+        }
+
+        function log(msg, type = 'sys') {
+            const container = document.getElementById('consoleLogs');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            const time = new Date().toLocaleTimeString();
+            entry.innerText = `[${time}] ${msg}`;
+            container.appendChild(entry);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function connectMQTT() {
+            const host = document.getElementById('mqttHost').value.trim();
+            const port = parseInt(document.getElementById('mqttPort').value);
+            const user = document.getElementById('mqttUser').value.trim();
+            const pass = document.getElementById('mqttPass').value.trim();
+
+            if (!host || !user || !pass) {
+                alert('Please fill in all HiveMQ credentials!');
+                return;
+            }
+
+            // Save for future auto-connect
+            localStorage.setItem('mqtt_host', host);
+            localStorage.setItem('mqtt_port', port);
+            localStorage.setItem('mqtt_user', user);
+            localStorage.setItem('mqtt_pass', pass);
+
+            document.getElementById('settingsCard').classList.remove('open');
+            log('Connecting to HiveMQ Cloud...', 'sys');
+
+            const options = {
+                clientId: 'iPhone_PWA_' + Math.random().toString(16).substr(2, 8),
+                username: user,
+                password: pass,
+                protocol: 'wss', // Secure WebSockets for HTTPS/PWA
+                port: port,
+                clean: true,
+                reconnectPeriod: 4000
+            };
+
+            const url = `wss://${host}:${port}/mqtt`;
+
+            if (client) {
+                client.end();
+            }
+
+            client = mqtt.connect(url, options);
+
+            client.on('connect', () => {
+                document.getElementById('statusDot').classList.add('online');
+                document.getElementById('statusText').innerText = 'Online';
+                log('Connected successfully!', 'sys');
+
+                // Subscribe to Mega telemetry/status topic
+                client.subscribe('myhome/mega/status', (err) => {
+                    if (!err) log('Subscribed to status feed', 'sys');
+                });
+            });
+
+            client.on('message', (topic, message) => {
+                const incoming = message.toString();
+                log(`Rx: ${incoming}`, 'rx');
+                document.getElementById('lastUpdated').innerText = new Date().toLocaleTimeString();
+                
+                // Example state sync from Mega (e.g., "RELAY1:ON")
+                if(incoming.includes(':')) {
+                    const [key, val] = incoming.split(':');
+                    if(states.hasOwnProperty(key)) {
+                        states[key] = (val.trim() === 'ON');
+                        updateUI(key);
+                    }
+                }
+            });
+
+            client.on('error', (err) => {
+                log(`Error: ${err.message}`, 'sys');
+            });
+
+            client.on('offline', () => {
+                document.getElementById('statusDot').classList.remove('online');
+                document.getElementById('statusText').innerText = 'Offline';
+            });
+        }
+
+        function toggleSwitch(id) {
+            states[id] = !states[id];
+            updateUI(id);
+
+            const payload = `${id}:${states[id] ? 'ON' : 'OFF'}`;
+            publishCommand(payload);
+        }
+
+        function sendPulse(cmd) {
+            publishCommand(cmd);
+            // Visual feedback pulse animation
+            const tile = document.getElementById('tile-PULSE');
+            tile.classList.add('active');
+            setTimeout(() => tile.classList.remove('active'), 300);
+        }
+
+        function updateUI(id) {
+            const tile = document.getElementById('tile-' + id);
+            const label = document.getElementById('state-' + id);
+            
+            if (states[id]) {
+                tile.classList.add('active');
+                label.innerText = 'ON';
+            } else {
+                tile.classList.remove('active');
+                label.innerText = 'OFF';
+            }
+        }
+
+        function publishCommand(cmd) {
+            if (client && client.connected) {
+                client.publish('myhome/mega/command', cmd);
+                log(`Tx: ${cmd}`);
+            } else {
+                log('Error: Not connected to Cloud!', 'sys');
+                alert('Not connected to HiveMQ! Open settings and check connection.');
+            }
+        }
+    </script>
+</body>
+</html>
