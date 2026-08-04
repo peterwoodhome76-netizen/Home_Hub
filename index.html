@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>Home Hub</title>
+    <title>Home Hub PWA</title>
     <!-- Paho MQTT Library over WebSockets -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
     <style>
@@ -17,30 +17,35 @@
             --accent-green: #30d158;
             --accent-red: #ff453a;
             --accent-orange: #ff9f0a;
+            --accent-purple: #af52de;
             --text: #ffffff;
             --text-sub: #8e8e93;
         }
+
+        * { box-sizing: border-box; }
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
             background-color: var(--bg);
             color: var(--text);
             margin: 0;
-            padding: 20px 16px 40px 16px;
+            padding: 16px 16px 90px 16px;
             -webkit-user-select: none;
             user-select: none;
+            height: 100vh;
+            overflow: hidden;
         }
 
         header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 20px;
-            padding-top: 10px;
+            margin-bottom: 12px;
+            padding-top: 5px;
         }
 
-        .title-area h1 { margin: 0; font-size: 28px; font-weight: 700; }
-        .title-area p { margin: 2px 0 0 0; font-size: 13px; color: var(--text-sub); }
+        .title-area h1 { margin: 0; font-size: 24px; font-weight: 700; }
+        .title-area p { margin: 2px 0 0 0; font-size: 12px; color: var(--text-sub); }
 
         .status-dot {
             width: 12px;
@@ -55,25 +60,22 @@
             box-shadow: 0 0 8px var(--accent-green);
         }
 
-        details {
-            background: var(--card-bg);
-            border-radius: 12px;
-            padding: 12px 16px;
-            margin-bottom: 20px;
+        /* --- PAGES CONTROLLER --- */
+        .page {
+            display: none;
+            height: calc(100vh - 160px);
+            overflow-y: auto;
         }
-        summary { font-weight: 600; cursor: pointer; color: var(--accent); }
-        .config-form { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
-        .config-form input {
-            background: #2c2c2e; border: none; padding: 10px; border-radius: 8px; color: #fff; font-size: 14px;
+        .page.active {
+            display: block;
         }
 
-        section { margin-bottom: 24px; }
-        section h2 { font-size: 18px; color: var(--text-sub); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
-
+        /* Card Layouts */
         .grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
             gap: 12px;
+            margin-bottom: 16px;
         }
 
         .card {
@@ -83,14 +85,14 @@
             display: flex;
             flex-direction: column;
             justify-content: space-between;
-            min-height: 110px;
+            min-height: 100px;
         }
 
-        .card-title { font-weight: 600; font-size: 16px; margin-bottom: 8px; }
+        .card-title { font-weight: 600; font-size: 15px; margin-bottom: 8px; }
 
         /* Sliders */
         .slider-container { display: flex; flex-direction: column; gap: 8px; }
-        .slider-val { font-size: 13px; color: var(--text-sub); align-self: flex-end; }
+        .slider-val { font-size: 12px; color: var(--text-sub); align-self: flex-end; }
         input[type=range] {
             -webkit-appearance: none;
             width: 100%;
@@ -101,14 +103,14 @@
         }
         input[type=range]::-webkit-slider-thumb {
             -webkit-appearance: none;
-            width: 24px;
-            height: 24px;
+            width: 22px;
+            height: 22px;
             border-radius: 50%;
             background: var(--accent);
             cursor: pointer;
         }
 
-        /* Toggle Buttons */
+        /* Buttons & Dock */
         .btn-group { display: flex; gap: 8px; margin-top: 8px; }
         .btn {
             flex: 1;
@@ -120,14 +122,13 @@
             cursor: pointer;
             background: #3a3a3c;
             color: #fff;
-            transition: active 0.1s;
+            transition: transform 0.1s;
         }
         .btn:active { transform: scale(0.96); }
         .btn-on { background: var(--accent); }
         .btn-heat { background: var(--accent-orange); }
         .btn-off { background: #2c2c2e; color: var(--text-sub); }
 
-        /* Color Pickers */
         .color-picker {
             -webkit-appearance: none;
             border: none;
@@ -138,17 +139,72 @@
             background: transparent;
         }
 
-        /* Live Feed Log */
+        /* NAVIGATION DOCK BAR (STICKY BOTTOM) */
+        .dock {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 70px;
+            background: rgba(28, 28, 30, 0.95);
+            backdrop-filter: blur(10px);
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            border-top: 1px solid #2c2c2e;
+            padding: 0 10px;
+        }
+
+        .dock-btn {
+            flex: 1;
+            margin: 0 4px;
+            padding: 12px 0;
+            background: #2c2c2e;
+            border: 1px solid #3a3a3c;
+            border-radius: 12px;
+            color: var(--text-sub);
+            font-weight: bold;
+            font-size: 13px;
+            cursor: pointer;
+            text-align: center;
+        }
+
+        .dock-btn.active {
+            background: var(--accent);
+            color: #fff;
+            border-color: var(--accent);
+        }
+
+        /* Log / System Section */
         .log-box {
             background: var(--card-bg);
             border-radius: 12px;
             padding: 12px;
             font-family: monospace;
-            font-size: 12px;
-            height: 80px;
+            font-size: 11px;
+            height: 100px;
             overflow-y: auto;
             color: var(--accent-green);
         }
+
+        .clock-display {
+            font-size: 48px;
+            font-weight: bold;
+            color: var(--accent-green);
+            text-align: center;
+            margin: 20px 0 5px 0;
+        }
+        .date-display {
+            font-size: 16px;
+            color: var(--text-sub);
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        details { background: var(--card-bg); border-radius: 12px; padding: 12px; margin-bottom: 12px; }
+        summary { font-weight: 600; cursor: pointer; color: var(--accent); }
+        .config-form { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+        .config-form input { background: #2c2c2e; border: none; padding: 8px; border-radius: 6px; color: #fff; }
     </style>
 </head>
 <body>
@@ -156,26 +212,36 @@
     <header>
         <div class="title-area">
             <h1>Control Hub</h1>
-            <p>Arduino Mega + ESP32 System</p>
+            <p>Arduino Mega + ESP32 Web Interface</p>
         </div>
         <div id="statusDot" class="status-dot"></div>
     </header>
 
-    <!-- Cloud Settings Accordion -->
-    <details>
-        <summary>⚙️ Cloud Connection Config</summary>
-        <div class="config-form">
-            <input type="text" id="cfgHost" placeholder="HiveMQ Host (e.g. xxx.hivemq.cloud)">
-            <input type="text" id="cfgPort" value="8884" placeholder="Port (Default 8884)">
-            <input type="text" id="cfgUser" placeholder="MQTT Username">
-            <input type="password" id="cfgPass" placeholder="MQTT Password">
-            <button class="btn btn-on" onclick="saveAndConnect()">Save & Connect</button>
-        </div>
-    </details>
+    <!-- ==================== PAGE 0: HOME ==================== -->
+    <div id="page-home" class="page active">
+        <div class="clock-display" id="liveClock">00:00:00</div>
+        <div class="date-display" id="liveDate">Loading Date...</div>
 
-    <!-- 1. AC DIMMABLE LIGHTS -->
-    <section>
-        <h2>Dimmable Lights (1 - 4)</h2>
+        <details>
+            <summary>⚙️ HiveMQ Cloud Config</summary>
+            <div class="config-form">
+                <input type="text" id="cfgHost" placeholder="HiveMQ Host">
+                <input type="text" id="cfgPort" value="8884" placeholder="Port (8884)">
+                <input type="text" id="cfgUser" placeholder="Username">
+                <input type="password" id="cfgPass" placeholder="Password">
+                <button class="btn btn-on" onclick="saveAndConnect()">Save & Connect</button>
+            </div>
+        </details>
+
+        <div style="margin-top: 15px;">
+            <div style="font-size: 12px; color: var(--text-sub); margin-bottom: 6px;">LIVE FEEDBACK</div>
+            <div id="logBoxHome" class="log-box">Awaiting connection...</div>
+        </div>
+    </div>
+
+    <!-- ==================== PAGE 1: LIGHTS ==================== -->
+    <div id="page-lights" class="page">
+        <div style="font-size: 14px; color: var(--text-sub); margin-bottom: 8px;">DIMMABLE LIGHTS (1 - 4)</div>
         <div class="grid">
             <div class="card">
                 <div class="card-title">Light 1</div>
@@ -206,11 +272,8 @@
                 </div>
             </div>
         </div>
-    </section>
 
-    <!-- 2. SWITCHED LIGHTS -->
-    <section>
-        <h2>Switched Lights (5 - 7)</h2>
+        <div style="font-size: 14px; color: var(--text-sub); margin-bottom: 8px;">SWITCHED LIGHTS (5 - 7)</div>
         <div class="grid">
             <div class="card">
                 <div class="card-title">Light 5</div>
@@ -234,26 +297,11 @@
                 </div>
             </div>
         </div>
-    </section>
+    </div>
 
-    <!-- 3. RGB STRIPS -->
-    <section>
-        <h2>RGB Accent Lighting</h2>
-        <div class="grid">
-            <div class="card">
-                <div class="card-title">RGB Strip 1</div>
-                <input type="color" class="color-picker" value="#000000" onchange="sendRGB(1, this.value)">
-            </div>
-            <div class="card">
-                <div class="card-title">RGB Strip 2</div>
-                <input type="color" class="color-picker" value="#000000" onchange="sendRGB(2, this.value)">
-            </div>
-        </div>
-    </section>
-
-    <!-- 4. HEATING CONTROLS -->
-    <section>
-        <h2>Heating & Hot Water</h2>
+    <!-- ==================== PAGE 2: HEATING ==================== -->
+    <div id="page-heating" class="page">
+        <div style="font-size: 14px; color: var(--text-sub); margin-bottom: 8px;">CLIMATE CONTROLS</div>
         <div class="grid">
             <div class="card">
                 <div class="card-title">Hot Water</div>
@@ -270,16 +318,83 @@
                 </div>
             </div>
         </div>
-    </section>
+    </div>
 
-    <!-- LIVE FEED LOG -->
-    <section>
-        <h2>Mega Live Feedback</h2>
-        <div id="logBox" class="log-box">Ready to connect...</div>
-    </section>
+    <!-- ==================== PAGE 3: OTHER / LOFT ==================== -->
+    <div id="page-other" class="page">
+        <div style="font-size: 14px; color: var(--text-sub); margin-bottom: 8px;">MISCELLANEOUS CONTROLS</div>
+        <div class="grid">
+            <div class="card">
+                <div class="card-title">Loft Light</div>
+                <div class="btn-group">
+                    <button class="btn btn-on" onclick="sendCmd('RELAY:LOFT:ON')">ON</button>
+                    <button class="btn btn-off" onclick="sendCmd('RELAY:LOFT:OFF')">OFF</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== PAGE 4: LED STRIPS ==================== -->
+    <div id="page-led" class="page">
+        <div style="font-size: 14px; color: var(--text-sub); margin-bottom: 8px;">RGB ACCENT LIGHTING</div>
+        <div class="grid">
+            <div class="card">
+                <div class="card-title">RGB Strip 1</div>
+                <input type="color" class="color-picker" value="#000000" onchange="sendRGB(1, this.value)">
+            </div>
+            <div class="card">
+                <div class="card-title">RGB Strip 2</div>
+                <input type="color" class="color-picker" value="#000000" onchange="sendRGB(2, this.value)">
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== NAVIGATION DOCK ==================== -->
+    <div class="dock" id="navDock">
+        <!-- Dynamic Dock Rendered via JS based on Active Page -->
+    </div>
 
     <script>
         let client = null;
+        let activePageId = 'page-home';
+
+        // Clock Update
+        setInterval(() => {
+            const now = new Date();
+            document.getElementById('liveClock').innerText = now.toLocaleTimeString();
+            document.getElementById('liveDate').innerText = now.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' });
+        }, 1000);
+
+        // Page Switcher Architecture
+        function switchPage(pageId) {
+            activePageId = pageId;
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.getElementById(pageId).classList.add('active');
+            renderDock();
+        }
+
+        // Dynamic Dock Rendering matching Sketch Workflow
+        function renderDock() {
+            const dock = document.getElementById('navDock');
+            dock.innerHTML = '';
+
+            if (activePageId === 'page-home') {
+                dock.innerHTML = `
+                    <div class="dock-btn" onclick="switchPage('page-lights')">LIGHTS</div>
+                    <div class="dock-btn" onclick="switchPage('page-heating')">HEATING</div>
+                    <div class="dock-btn" onclick="switchPage('page-other')">OTHER</div>
+                `;
+            } else if (activePageId === 'page-lights') {
+                dock.innerHTML = `
+                    <div class="dock-btn active" onclick="switchPage('page-home')">HOME</div>
+                    <div class="dock-btn" onclick="switchPage('page-led')">LED</div>
+                `;
+            } else {
+                dock.innerHTML = `
+                    <div class="dock-btn active" onclick="switchPage('page-home')">HOME</div>
+                `;
+            }
+        }
 
         // Auto Load Saved Config
         window.onload = () => {
@@ -287,6 +402,8 @@
             document.getElementById('cfgPort').value = localStorage.getItem('mqtt_port') || '8884';
             document.getElementById('cfgUser').value = localStorage.getItem('mqtt_user') || '';
             document.getElementById('cfgPass').value = localStorage.getItem('mqtt_pass') || '';
+            
+            renderDock();
             if (localStorage.getItem('mqtt_host')) connectMQTT();
         };
 
@@ -299,8 +416,8 @@
         }
 
         function log(msg) {
-            const lb = document.getElementById('logBox');
-            lb.innerHTML = `> ${msg}<br>${lb.innerHTML}`;
+            const lb = document.getElementById('logBoxHome');
+            if (lb) lb.innerHTML = `> ${msg}<br>${lb.innerHTML}`;
         }
 
         function connectMQTT() {
@@ -309,9 +426,9 @@
             const user = localStorage.getItem('mqtt_user');
             const pass = localStorage.getItem('mqtt_pass');
 
-            if (!host) { alert('Please enter your HiveMQ Host'); return; }
+            if (!host) { return; }
 
-            const clientId = 'iPhone_PWA_' + Math.random().toString(16).substr(2, 8);
+            const clientId = 'WebPWA_' + Math.random().toString(16).substr(2, 8);
             client = new Paho.MQTT.Client(host, port, clientId);
 
             client.onConnectionLost = (rsp) => {
